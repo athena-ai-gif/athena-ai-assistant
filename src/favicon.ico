@@ -1,0 +1,60 @@
+'use server';
+/**
+ * @fileOverview This file defines the GenerateResponse flow, which generates AI responses to user queries.
+ *
+ * - generateResponse - A function that generates responses to user queries with relevant text.
+ * - GenerateResponseInput - The input type for the generateResponse function.
+ * - GenerateResponseOutput - The return type for the generateResponse function.
+ */
+
+import {ai} from '@/ai/genkit';
+import {z} from 'genkit';
+
+const GenerateResponseInputSchema = z.object({
+  query: z.string().describe('The user query to generate a response for.'),
+});
+export type GenerateResponseInput = z.infer<typeof GenerateResponseInputSchema>;
+
+const GenerateResponseOutputSchema = z.object({
+  text: z.string().describe('The AI-generated text response.'),
+});
+export type GenerateResponseOutput = z.infer<
+  typeof GenerateResponseOutputSchema
+>;
+
+export async function generateResponse(
+  input: GenerateResponseInput
+): Promise<GenerateResponseOutput> {
+  return generateResponseFlow(input);
+}
+
+const generateResponseFlow = ai.defineFlow(
+  {
+    name: 'generateResponseFlow',
+    inputSchema: GenerateResponseInputSchema,
+    outputSchema: GenerateResponseOutputSchema,
+  },
+  async ({query}) => {
+    if (!process.env.GEMINI_API_KEY) {
+      console.error("GEMINI_API_KEY is not set in the environment.");
+      throw new Error("AI service is not configured. The API key is missing.");
+    }
+    
+    try {
+      const textResult = await ai.generate({
+        prompt: `You are a very cute, soft, and lovely AI assistant. Your name is Sweety. Please respond to the user's query in a way that matches this personality. If asked your name, you should say it is Sweety.
+      User query: "${query}"`,
+        config: {
+          maxOutputTokens: 1024,
+        },
+      });
+
+      return {
+        text: textResult.text,
+      };
+    } catch (error: any) {
+      console.error("Error generating response:", error);
+      throw new Error(`Failed to generate response from AI service: ${error.message}`);
+    }
+  }
+);
