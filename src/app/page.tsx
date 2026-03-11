@@ -1,107 +1,156 @@
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
-import { generateResponse } from '@/ai/flows/generate-response';
 
-export default function SweetyChat() {
-  const [input, setInput] = useState('');
-  const [messages, setMessages] = useState([
-    { role: 'assistant', text: "Hiiii! I'm Sweety! 🌸 I'm so happy you're here! How can I make your day special? ✨" }
-  ]);
-  const [loading, setLoading] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+import * as React from "react";
+import { useState, useEffect, useRef } from "react";
+import { Bot, Plus, Search, Trash2, User, Send, Loader2, Menu, X } from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
+import { generateResponse } from "@/ai/flows/generate-response";
 
-  // Auto-scroll to bottom when new message arrives
+// Simple UI Components integrated to avoid "Module Not Found"
+const Button = ({ className, variant, size, ...props }: any) => {
+  const baseStyles = "inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50";
+  const variants: any = {
+    ghost: "hover:bg-accent hover:text-accent-foreground",
+    primary: "bg-emerald-600 text-white hover:bg-emerald-700",
+    outline: "border border-input bg-background hover:bg-accent",
+  };
+  return <button className={`${baseStyles} ${variants[variant || 'primary']} ${className}`} {...props} />;
+};
+
+export default function ChatPage() {
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [inputValue, setInputValue] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  // Load from LocalStorage
   useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const saved = localStorage.getItem("sweety_chats");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      setConversations(parsed);
+      if (parsed.length > 0) setActiveId(parsed[0].id);
+    } else {
+      createNewChat();
+    }
+  }, []);
 
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
+  // Save to LocalStorage
+  useEffect(() => {
+    localStorage.setItem("sweety_chats", JSON.stringify(conversations));
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    }
+  }, [conversations]);
 
-    const userMessage = { role: 'user', text: input };
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
-    setLoading(true);
+  const createNewChat = () => {
+    const newChat = { id: uuidv4(), title: "New Chat", messages: [], createdAt: new Date() };
+    setConversations([newChat, ...conversations]);
+    setActiveId(newChat.id);
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputValue.trim() || isLoading) return;
+
+    const userMsg = { id: uuidv4(), role: 'user', text: inputValue };
+    const currentId = activeId;
+
+    setConversations(prev => prev.map(c => 
+      c.id === currentId ? { ...c, messages: [...c.messages, userMsg], title: c.messages.length === 0 ? inputValue.slice(0, 20) : c.title } : c
+    ));
+    
+    setInputValue("");
+    setIsLoading(true);
 
     try {
-      // Calling your Firebase Genkit Flow
-      const response = await generateResponse({ query: input });
-      setMessages((prev) => [...prev, { role: 'assistant', text: response.text }]);
-    } catch (error) {
-      console.error(error);
-      setMessages((prev) => [...prev, { role: 'assistant', text: "Oh no! My brain feels a bit sleepy. Please check if the API Key is added to Vercel! 🎀" }]);
+      const response = await generateResponse({ query: userMsg.text });
+      const aiMsg = { id: uuidv4(), role: 'assistant', text: response.text };
+      setConversations(prev => prev.map(c => 
+        c.id === currentId ? { ...c, messages: [...c.messages, aiMsg] } : c
+      ));
+    } catch (err) {
+      console.error(err);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
+  const activeChat = conversations.find(c => c.id === activeId);
+
   return (
-    <div className="flex h-screen bg-[#0D1117] text-white font-sans">
-      {/* Sidebar - Desktop Only */}
-      <div className="w-72 bg-[#161B22] border-r border-gray-800 p-6 hidden md:flex flex-col">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-black font-bold text-xl shadow-lg shadow-emerald-500/20">
-            S
+    <div className="flex h-screen bg-[#0d1117] text-white overflow-hidden font-sans">
+      {/* Sidebar */}
+      <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 bg-[#161b22] border-r border-gray-800 flex flex-col`}>
+        <div className="p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 font-bold text-emerald-400">
+            <Bot size={24} /> <span>Sweety AI</span>
           </div>
-          <h1 className="text-xl font-bold tracking-tight">Athena AI</h1>
+          <Button variant="ghost" size="icon" onClick={createNewChat}><Plus size={20}/></Button>
         </div>
-        <div className="flex-1">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-4">Chat Mode</p>
-          <div className="bg-[#21262D] p-3 rounded-lg border border-emerald-500/30 text-emerald-400 text-sm flex items-center gap-2">
-            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-            Sweety (Active)
-          </div>
+        
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {conversations.map(c => (
+            <div 
+              key={c.id} 
+              onClick={() => setActiveId(c.id)}
+              className={`p-3 rounded-lg cursor-pointer flex items-center justify-between group ${activeId === c.id ? 'bg-[#21262d]' : 'hover:bg-[#21262d]/50'}`}
+            >
+              <span className="truncate text-sm">{c.title}</span>
+              <Trash2 size={14} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400" 
+                onClick={(e) => { e.stopPropagation(); setConversations(conversations.filter(chat => chat.id !== c.id)); }} />
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Main Chat Area */}
+      {/* Main Content */}
       <div className="flex-1 flex flex-col relative">
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-              <div className={`max-w-[85%] md:max-w-2xl p-4 rounded-2xl shadow-sm ${
-                msg.role === 'user' 
-                  ? 'bg-emerald-600 text-white rounded-tr-none' 
-                  : 'bg-[#21262D] border border-gray-700 text-gray-100 rounded-tl-none'
-              }`}>
-                <p className="leading-relaxed">{msg.text}</p>
+        <header className="p-4 border-b border-gray-800 flex items-center gap-4">
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="text-gray-400 hover:text-white">
+            <Menu size={20} />
+          </button>
+          <h1 className="font-semibold">{activeChat?.title || "New Conversation"}</h1>
+        </header>
+
+        {/* Chat Area */}
+        <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+          {activeChat?.messages.map((m: any) => (
+            <div key={m.id} className={`flex gap-4 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              <div className={`p-2 rounded-full h-8 w-8 flex items-center justify-center ${m.role === 'user' ? 'bg-emerald-600' : 'bg-gray-700'}`}>
+                {m.role === 'user' ? <User size={16}/> : <Bot size={16}/>}
+              </div>
+              <div className={`max-w-[80%] p-4 rounded-2xl ${m.role === 'user' ? 'bg-emerald-600/10 border border-emerald-600/20' : 'bg-[#161b22] border border-gray-800'}`}>
+                <p className="text-sm leading-relaxed">{m.text}</p>
               </div>
             </div>
           ))}
-          {loading && (
-            <div className="flex justify-start">
-              <div className="bg-[#21262D] p-4 rounded-2xl rounded-tl-none border border-gray-700">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce"></span>
-                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:0.2s]"></span>
-                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:0.4s]"></span>
-                </div>
-              </div>
+          {isLoading && (
+            <div className="flex gap-4 animate-pulse">
+              <div className="p-2 rounded-full bg-gray-700 h-8 w-8 flex items-center justify-center"><Bot size={16}/></div>
+              <div className="bg-[#161b22] p-4 rounded-2xl border border-gray-800"><Loader2 className="animate-spin text-emerald-500" size={18}/></div>
             </div>
           )}
-          <div ref={scrollRef} />
         </div>
 
         {/* Input Area */}
-        <div className="p-4 md:p-8 bg-gradient-to-t from-[#0D1117] via-[#0D1117] to-transparent">
-          <div className="max-w-4xl mx-auto flex gap-3 bg-[#161B22] p-2 rounded-2xl border border-gray-700 focus-within:border-emerald-500/50 transition-all shadow-2xl">
-            <input 
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+        <div className="p-4 md:p-8 bg-gradient-to-t from-[#0d1117] via-[#0d1117] to-transparent">
+          <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto relative">
+            <textarea
+              rows={1}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
               placeholder="Message Sweety..."
-              className="flex-1 bg-transparent p-3 outline-none text-gray-100 placeholder:text-gray-500"
+              className="w-full bg-[#161b22] border border-gray-700 rounded-xl py-4 pl-4 pr-14 focus:outline-none focus:border-emerald-500 transition-all resize-none overflow-hidden"
+              onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) handleSendMessage(e); }}
             />
-            <button 
-              onClick={handleSend}
-              disabled={loading}
-              className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-gray-700 text-black font-bold px-6 rounded-xl transition-colors flex items-center justify-center"
-            >
-              {loading ? '...' : 'Send'}
+            <button type="submit" disabled={!inputValue.trim() || isLoading} className="absolute right-3 bottom-3 p-2 bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:bg-gray-700 transition-all">
+              <Send size={18} />
             </button>
-          </div>
-          <p className="text-center text-[10px] text-gray-600 mt-4">Athena AI Assistant • Powered by Genkit & Gemini</p>
+          </form>
+          <p className="text-center text-[10px] text-gray-500 mt-2">Athena AI Assistant • Powered by Genkit & Gemini</p>
         </div>
       </div>
     </div>
