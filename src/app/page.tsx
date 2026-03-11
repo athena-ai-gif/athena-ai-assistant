@@ -1,394 +1,109 @@
 "use client";
+import React, { useState, useEffect, useRef } from 'react';
+import { generateResponse } from '@/ai/flows/generate-response';
 
-import * as React from "react";
-import { useState, useEffect, useRef, useMemo } from "react";
-import { Bot, Plus, Search, Trash2, User, X, Send, Loader2 } from "lucide-react";
-import { v4 as uuidv4 } from "uuid";
-import type { Conversation, Message } from "@/lib/types";
-import { generateResponse, type GenerateResponseInput } from "@/ai/flows/generate-response";
+export default function SweetyChat() {
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState([
+    { role: 'assistant', text: "Hiiii! I'm Sweety! 🌸 I'm so happy you're here! How can I make your day special? ✨" }
+  ]);
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarProvider,
-  SidebarTrigger,
-  useSidebar,
-} from "@/components/ui/sidebar";
-import { GptLogo } from "@/components/gpt-logo";
-import { SettingsDialog, SUPPORTED_VOICES } from "@/components/settings-dialog";
-import { useToast } from "@/hooks/use-toast";
-
-type ScrollAreaRef = React.ElementRef<typeof ScrollArea>;
-
-export default function ChatPage() {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [inputValue, setInputValue] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [voice, setVoice] = useState("algenib");
-  const [cooldown, setCooldown] = useState(0);
-  const { toast } = useToast();
-  const scrollAreaRef = useRef<ScrollAreaRef>(null);
-
+  // Auto-scroll to bottom when new message arrives
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (cooldown > 0) {
-      timer = setInterval(() => {
-        setCooldown(prev => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [cooldown]);
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-  const handleNewConversation = (setActive = true) => {
-    const newConversation: Conversation = {
-      id: uuidv4(),
-      title: "New Conversation",
-      messages: [],
-      createdAt: new Date().toISOString(),
-    };
-    setConversations(prev => [newConversation, ...prev]);
-    if (setActive) {
-      setActiveConversationId(newConversation.id);
-    }
-    return newConversation;
-  };
+  const handleSend = async () => {
+    if (!input.trim() || loading) return;
 
-  useEffect(() => {
-    let loadedConvos: Conversation[] = [];
+    const userMessage = { role: 'user', text: input };
+    setMessages((prev) => [...prev, userMessage]);
+    setInput('');
+    setLoading(true);
+
     try {
-      const storedConversations = localStorage.getItem("Sweety-conversations");
-      if (storedConversations) {
-        const parsed = JSON.parse(storedConversations);
-        if (Array.isArray(parsed)) {
-            loadedConvos = parsed as Conversation[];
-        }
-      }
+      // Calling your Firebase Genkit Flow
+      const response = await generateResponse({ query: input });
+      setMessages((prev) => [...prev, { role: 'assistant', text: response.text }]);
     } catch (error) {
-      console.error("Failed to parse conversations from local storage:", error);
-    }
-    
-    if (loadedConvos.length > 0) {
-      const sortedConvos = loadedConvos.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setConversations(sortedConvos);
-      setActiveConversationId(sortedConvos[0].id);
-    } else {
-      handleNewConversation();
-    }
-
-    const storedVoice = localStorage.getItem("Sweety-voice");
-    if (storedVoice && SUPPORTED_VOICES.map(v => v.toLowerCase()).includes(storedVoice.toLowerCase())) {
-        setVoice(storedVoice);
-    } else {
-        const defaultVoice = "algenib";
-        setVoice(defaultVoice);
-        localStorage.setItem("Sweety-voice", defaultVoice);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    try {
-      if (conversations.length > 0) {
-        localStorage.setItem("Sweety-conversations", JSON.stringify(conversations));
-      } else {
-        localStorage.removeItem("Sweety-conversations");
-      }
-    } catch (error) {
-      console.error("Failed to save conversations to local storage:", error);
-    }
-  }, [conversations]);
-
-  useEffect(() => {
-    if (scrollAreaRef.current?.viewport) {
-      scrollAreaRef.current.viewport.scrollTo({
-        top: scrollAreaRef.current.viewport.scrollHeight,
-        behavior: 'smooth'
-      });
-    }
-  }, [conversations, activeConversationId, isLoading]);
-
-
-  const activeConversation = useMemo(() => {
-    return conversations.find((c) => c.id === activeConversationId);
-  }, [conversations, activeConversationId]);
-  
-  const filteredConversations = useMemo(() => {
-    return conversations.filter((c) =>
-      c.title.toLowerCase().includes(searchTerm.toLowerCase())
-    ).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [conversations, searchTerm]);
-
-  const handleDeleteConversation = (id: string) => {
-    setConversations(prev => {
-        const remaining = prev.filter(c => c.id !== id);
-        if (activeConversationId === id) {
-            if (remaining.length > 0) {
-                const sorted = remaining.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                setActiveConversationId(sorted[0].id);
-            } else {
-                setActiveConversationId(null);
-            }
-        }
-        return remaining;
-    });
-  };
-
-  const handleSendMessage = async (messageText: string) => {
-    if (!messageText.trim() || cooldown > 0) return;
-  
-    let currentConversationId = activeConversationId;
-    let isNewConversation = false;
-  
-    if (!currentConversationId || !activeConversation || activeConversation.messages.length === 0) {
-      const newConvo = handleNewConversation();
-      currentConversationId = newConvo.id;
-      isNewConversation = true;
-    }
-  
-    const userMessage: Message = {
-      id: uuidv4(),
-      role: 'user',
-      text: messageText.trim(),
-    };
-  
-    setConversations(prev =>
-      prev.map(c =>
-        c.id === currentConversationId
-          ? {
-              ...c,
-              messages: [...c.messages, userMessage],
-              title: isNewConversation ? messageText.substring(0, 30) : c.title,
-            }
-          : c
-      )
-    );
-    
-    setInputValue('');
-    setIsLoading(true);
-  
-    try {
-      const response = await generateResponse({
-        query: messageText.trim(),
-      });
-  
-      const assistantMessage: Message = {
-        id: uuidv4(),
-        role: 'assistant',
-        text: response.text,
-      };
-  
-      setConversations(prev =>
-        prev.map(c =>
-          c.id === currentConversationId
-            ? { ...c, messages: [...c.messages, assistantMessage] }
-            : c
-        )
-      );
-    } catch (error: any) {
-      console.error('AI Error:', error);
-      
-      if (error.message && error.message.includes('429')) {
-        const retryMatch = error.message.match(/Please retry in (\d+\.?\d*)/);
-        const retrySeconds = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 60;
-        setCooldown(retrySeconds);
-        toast({
-          variant: 'destructive',
-          title: 'Rate Limit Exceeded',
-          description: `You've made too many requests. Please wait ${retrySeconds} seconds.`,
-        });
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'An unexpected error occurred. Please try again.',
-        });
-      }
-  
-      setConversations(prev =>
-        prev.map(c =>
-          c.id === currentConversationId
-            ? { ...c, messages: c.messages.filter(m => m.id !== userMessage.id) }
-            : c
-        )
-      );
+      console.error(error);
+      setMessages((prev) => [...prev, { role: 'assistant', text: "Oh no! My brain feels a bit sleepy. Please check if the API Key is added to Vercel! 🎀" }]);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
-
-  const handleFormSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    handleSendMessage(inputValue);
-  };
-
-  const isInputDisabled = isLoading || cooldown > 0;
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen bg-background text-foreground">
-        <Sidebar variant="sidebar" collapsible="icon" className="bg-sidebar">
-          <SidebarHeader>
-            <div className="flex items-center gap-2">
-              <GptLogo className="size-8 text-primary" />
-              <span className="text-lg font-semibold group-data-[collapsible=icon]:hidden">
-                Sweety
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="group-data-[collapsible=icon]:hidden"
-              onClick={() => handleNewConversation()}
-            >
-              <Plus />
-            </Button>
-          </SidebarHeader>
-          <SidebarContent>
-            <div className="relative p-2">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                placeholder="Search..."
-                className="pl-8 bg-background/50 focus-visible:ring-primary"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <SidebarMenu className="p-2">
-              {filteredConversations.map((convo) => (
-                <SidebarMenuItem key={convo.id} className="group/item">
-                  <SidebarMenuButton
-                    onClick={() => setActiveConversationId(convo.id)}
-                    isActive={activeConversationId === convo.id}
-                    className="truncate"
-                  >
-                    {convo.title}
-                  </SidebarMenuButton>
-                   <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-1 top-1/2 -translate-y-1/2 size-7 opacity-0 group-hover/item:opacity-100 group-data-[collapsible=icon]:hidden"
-                      onClick={() => handleDeleteConversation(convo.id)}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarContent>
-          <SidebarFooter>
-            <SettingsDialog voice={voice} setVoice={setVoice} />
-          </SidebarFooter>
-        </Sidebar>
-
-        <SidebarInset className="flex flex-col max-h-screen">
-          <header className="flex items-center justify-between p-4 border-b">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="md:hidden"/>
-              <h2 className="text-lg font-semibold">
-                {activeConversation?.title || "Sweety AI Assistant"}
-              </h2>
-            </div>
-          </header>
-
-          <div className="flex-1 overflow-hidden">
-            <ScrollArea className="h-full" viewportRef={scrollAreaRef}>
-              <div className="p-4 md:p-6 space-y-6">
-                {activeConversation && activeConversation.messages.length > 0 ? (
-                  activeConversation.messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={cn(
-                        "flex items-start gap-4",
-                        message.role === "user" && "justify-end"
-                      )}
-                    >
-                      {message.role === "assistant" && (
-                        <AvatarIcon>
-                          <Bot className="text-primary" />
-                        </AvatarIcon>
-                      )}
-                      <div
-                        className={cn(
-                          "max-w-prose rounded-lg p-3",
-                          message.role === "user"
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted"
-                        )}
-                      >
-                        <p className="text-sm whitespace-pre-wrap">{message.text}</p>
-                      </div>
-                      {message.role === "user" && (
-                        <AvatarIcon>
-                          <User />
-                        </AvatarIcon>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  null
-                )}
-                {isLoading && (
-                  <div className="flex items-start gap-4">
-                     <AvatarIcon>
-                        <Bot className="text-primary" />
-                      </AvatarIcon>
-                      <div className="bg-muted rounded-lg p-3 flex items-center space-x-2">
-                         <Loader2 className="size-4 animate-spin text-primary" />
-                         <span className="text-sm text-muted-foreground">Sweety is thinking...</span>
-                      </div>
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
+    <div className="flex h-screen bg-[#0D1117] text-white font-sans">
+      {/* Sidebar - Desktop Only */}
+      <div className="w-72 bg-[#161B22] border-r border-gray-800 p-6 hidden md:flex flex-col">
+        <div className="flex items-center gap-3 mb-10">
+          <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-black font-bold text-xl shadow-lg shadow-emerald-500/20">
+            S
           </div>
-
-          <div className="p-4 border-t">
-            <form onSubmit={handleFormSubmit} className="relative">
-              <Textarea
-                placeholder={cooldown > 0 ? `Rate limit exceeded. Please wait ${cooldown}s...` : "Ask Sweety anything..."}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleFormSubmit(e);
-                  }
-                }}
-                className="pr-24 min-h-[48px] resize-none"
-                disabled={isInputDisabled}
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
-                <Button
-                  type="submit"
-                  size="icon"
-                  disabled={isInputDisabled || !inputValue.trim()}
-                >
-                  <Send className="size-5" />
-                </Button>
-              </div>
-            </form>
+          <h1 className="text-xl font-bold tracking-tight">Athena AI</h1>
+        </div>
+        <div className="flex-1">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-4">Chat Mode</p>
+          <div className="bg-[#21262D] p-3 rounded-lg border border-emerald-500/30 text-emerald-400 text-sm flex items-center gap-2">
+            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+            Sweety (Active)
           </div>
-        </SidebarInset>
+        </div>
       </div>
-    </SidebarProvider>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col relative">
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+              <div className={`max-w-[85%] md:max-w-2xl p-4 rounded-2xl shadow-sm ${
+                msg.role === 'user' 
+                  ? 'bg-emerald-600 text-white rounded-tr-none' 
+                  : 'bg-[#21262D] border border-gray-700 text-gray-100 rounded-tl-none'
+              }`}>
+                <p className="leading-relaxed">{msg.text}</p>
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-[#21262D] p-4 rounded-2xl rounded-tl-none border border-gray-700">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce"></span>
+                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={scrollRef} />
+        </div>
+
+        {/* Input Area */}
+        <div className="p-4 md:p-8 bg-gradient-to-t from-[#0D1117] via-[#0D1117] to-transparent">
+          <div className="max-w-4xl mx-auto flex gap-3 bg-[#161B22] p-2 rounded-2xl border border-gray-700 focus-within:border-emerald-500/50 transition-all shadow-2xl">
+            <input 
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              placeholder="Message Sweety..."
+              className="flex-1 bg-transparent p-3 outline-none text-gray-100 placeholder:text-gray-500"
+            />
+            <button 
+              onClick={handleSend}
+              disabled={loading}
+              className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-gray-700 text-black font-bold px-6 rounded-xl transition-colors flex items-center justify-center"
+            >
+              {loading ? '...' : 'Send'}
+            </button>
+          </div>
+          <p className="text-center text-[10px] text-gray-600 mt-4">Athena AI Assistant • Powered by Genkit & Gemini</p>
+        </div>
+      </div>
+    </div>
   );
 }
-
-const AvatarIcon = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex-shrink-0 size-8 flex items-center justify-center rounded-full bg-muted border">
-    {children}
-  </div>
-);
