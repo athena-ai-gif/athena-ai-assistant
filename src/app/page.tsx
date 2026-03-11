@@ -1,40 +1,61 @@
 "use client";
-
 import React, { useState } from 'react';
 
-export default function AthenaAI() {
-  const [messages, setMessages] = useState([{ role: 'assistant', content: 'Hello! I am Athena. How can I help you today?' }]);
+export default function SweetyAI() {
+  const [messages, setMessages] = useState([
+    { role: 'assistant', content: 'Hiiii there, sweetie pie! 🌸 It’s so lovely to hear from you! I’m Sweety, and I’m super happy to be here. How can I make your day extra warm and fuzzy today? ✨' }
+  ]);
   const [input, setInput] = useState('');
 
   const handleSend = () => {
-    if (!input) return;
-    setMessages([...messages, { role: 'user', content: input }]);
+    if (!input.trim()) return;
+    const newMessages = [...messages, { role: 'user', content: input }];
+    setMessages(newMessages);
     setInput('');
-    // Yahan aap apna AI logic connect kar sakte hain
+    
+    // Yahan hum AI ka 'Thinking' state dikha sakte hain
+    setTimeout(() => {
+      setMessages([...newMessages, { role: 'assistant', content: "Oh, hello there! I'm thinking... (Connect your API for real answers!)" }]);
+    }, 1000);
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <h1 style={{ color: '#0070f3' }}>Athena AI Assistant</h1>
-      <div style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '15px', height: '400px', overflowY: 'scroll', marginBottom: '10px' }}>
-        {messages.map((msg, i) => (
-          <div key={i} style={{ textAlign: msg.role === 'user' ? 'right' : 'left', margin: '10px 0' }}>
-            <span style={{ background: msg.role === 'user' ? '#0070f3' : '#eee', color: msg.role === 'user' ? 'white' : 'black', padding: '8px 12px', borderRadius: '15px' }}>
-              {msg.content}
-            </span>
-          </div>
-        ))}
+    <div className="flex h-screen bg-[#121212] text-white font-sans">
+      {/* Sidebar */}
+      <div className="w-64 bg-[#1e1e1e] p-4 hidden md:block border-r border-gray-800">
+        <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+          <span className="p-2 bg-emerald-500 rounded-lg text-xs">S</span> Sweety
+        </h2>
+        <button className="w-full py-2 px-4 border border-gray-700 rounded-md text-left hover:bg-gray-800 transition">+ New Conversation</button>
       </div>
-      <div style={{ display: 'flex', gap: '10px' }}>
-        <input 
-          value={input} 
-          onChange={(e) => setInput(e.target.value)} 
-          placeholder="Type a message..." 
-          style={{ flex: 1, padding: '10px', borderRadius: '5px', border: '1px solid #ccc' }}
-        />
-        <button onClick={handleSend} style={{ padding: '10px 20px', background: '#0070f3', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-          Send
-        </button>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] p-4 rounded-2xl ${msg.role === 'user' ? 'bg-[#0070f3] text-white' : 'bg-[#2a2a2a] text-gray-200'}`}>
+                {msg.content}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Input Box */}
+        <div className="p-6 bg-[#121212]">
+          <div className="max-w-3xl mx-auto relative">
+            <input 
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              placeholder="Ask Sweety anything..."
+              className="w-full bg-[#2a2a2a] border-none rounded-xl p-4 pr-12 focus:ring-2 focus:ring-emerald-500 outline-none"
+            />
+            <button onClick={handleSend} className="absolute right-3 top-3 p-2 bg-emerald-500 rounded-lg hover:bg-emerald-600">
+              ✈️
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
